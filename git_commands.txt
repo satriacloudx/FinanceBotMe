@@ -1,0 +1,36 @@
+# Git Commands untuk Upload ke GitHub
+
+# 1. Initialize Git (jika belum)
+git init
+
+# 2. Add all files
+git add .
+
+# 3. Commit
+git commit -m "Initial commit: FinanceHub Bot - Web Service with Webhook"
+
+# 4. Set main branch
+git branch -M main
+
+# 5. Add remote (GANTI YOUR_USERNAME dengan username GitHub Anda)
+git remote add origin https://github.com/YOUR_USERNAME/financehub-bot.git
+
+# 6. Push to GitHub
+git push -u origin main
+
+# ===================================================================
+# Setelah push pertama, untuk update selanjutnya gunakan:
+# ===================================================================
+
+# Add changes
+git add .
+
+# Commit with message
+git commit -m "Fix: Add webhook support for Render Web Service"
+
+# Push
+git push
+
+# ===================================================================
+# Render akan otomatis redeploy setelah push!
+# ===================================================================

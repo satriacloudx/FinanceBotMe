@@ -1,0 +1,199 @@
+================================================================================
+                        TROUBLESHOOTING GUIDE
+================================================================================
+
+Common issues and solutions for FinanceHub Bot deployment.
+
+================================================================================
+ERROR: "PTB must be installed via pip install python-telegram-bot[webhooks]"
+================================================================================
+
+SOLUTION: Already fixed in requirements.txt
+- requirements.txt now has: python-telegram-bot[webhooks]==20.7
+- Push update to GitHub
+- Render will auto-redeploy
+
+Commands:
+git add .
+git commit -m "Fix: Add webhook support"
+git push
+
+================================================================================
+ERROR: Bot not responding after deployment
+================================================================================
+
+CAUSE: Webhook not set
+
+SOLUTION: Set webhook URL
+1. Get your Render URL (example: https://financehub-bot.onrender.com)
+2. Open this URL in browser (replace with your values):
+
+https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=<YOUR_RENDER_URL>/<YOUR_BOT_TOKEN>
+
+Example:
+https://api.telegram.org/bot123456:ABC/setWebhook?url=https://financehub-bot.onrender.com/123456:ABC
+
+3. Should see: {"ok":true,"result":true,"description":"Webhook was set"}
+
+================================================================================
+ERROR: Service keeps sleeping
+================================================================================
+
+CAUSE: Render Free Tier sleeps after 15 min inactivity
+
+SOLUTION: Use UptimeRobot (free)
+1. Go to uptimerobot.com
+2. Sign up (free)
+3. Add Monitor → HTTP(s)
+4. URL: Your Render URL
+5. Interval: 5 minutes
+6. Done!
+
+See KEEP_ALIVE_GUIDE.txt for details.
+
+================================================================================
+ERROR: Webhook already set to different URL
+================================================================================
+
+SOLUTION: Delete old webhook first
+1. Open in browser:
+https://api.telegram.org/bot<YOUR_BOT_TOKEN>/deleteWebhook
+
+2. Then set new webhook:
+https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=<YOUR_RENDER_URL>/<YOUR_BOT_TOKEN>
+
+================================================================================
+ERROR: Build failed on Render
+================================================================================
+
+CAUSE: Missing dependencies or wrong Python version
+
+SOLUTION:
+1. Check requirements.txt format (no typos)
+2. Verify PYTHON_VERSION=3.10.0 in environment variables
+3. Check Render logs for specific error
+4. Redeploy: Manual Deploy → Deploy latest commit
+
+================================================================================
+ERROR: Database lost after restart
+================================================================================
+
+CAUSE: Render Free Tier has ephemeral storage
+
+SOLUTION: Backup regularly
+1. Open Telegram
+2. Send /admin to bot
+3. Click "💾 Backup Database"
+4. Download file
+5. Save in safe location
+6. Do this weekly!
+
+To restore:
+- Not possible on Render Free Tier
+- Consider upgrading to paid plan for persistent storage
+
+================================================================================
+ERROR: Admin panel not working
+================================================================================
+
+CAUSE: ADMIN_ID not set correctly
+
+SOLUTION:
+1. Get your User ID from @userinfobot
+2. In Render Dashboard → Environment Variables
+3. Check ADMIN_ID value (must be number, no quotes)
+4. Example: 123456789 (correct)
+5. Example: "123456789" (wrong - has quotes)
+6. Save and redeploy
+
+================================================================================
+ERROR: Bot responds slowly
+================================================================================
+
+CAUSE: Service was sleeping (cold start)
+
+SOLUTION:
+1. Use UptimeRobot to keep service awake (see KEEP_ALIVE_GUIDE.txt)
+2. Or upgrade to paid plan ($7/mo) for always-on service
+
+================================================================================
+ERROR: Charts not generating
+================================================================================
+
+CAUSE: Missing matplotlib/seaborn dependencies
+
+SOLUTION:
+1. Check requirements.txt has:
+   - matplotlib==3.8.2
+   - seaborn==0.13.0
+2. Redeploy if needed
+3. Check Render logs for errors
+
+================================================================================
+ERROR: Export to Excel fails
+================================================================================
+
+CAUSE: Missing openpyxl dependency
+
+SOLUTION:
+1. Check requirements.txt has: openpyxl==3.1.2
+2. Redeploy if needed
+
+================================================================================
+HOW TO CHECK WEBHOOK STATUS
+================================================================================
+
+Open in browser:
+https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getWebhookInfo
+
+Should show:
+- url: Your Render URL
+- has_custom_certificate: false
+- pending_update_count: 0 (or low number)
+- last_error_date: (should be empty)
+
+================================================================================
+HOW TO VIEW RENDER LOGS
+================================================================================
+
+1. Go to Render Dashboard
+2. Click your service (financehub-bot)
+3. Click "Logs" tab
+4. Look for:
+   ✅ "🚀 Starting bot with webhook..."
+   ✅ "Bot started successfully"
+   ❌ Any ERROR or CRITICAL messages
+
+================================================================================
+HOW TO REDEPLOY
+================================================================================
+
+Method 1: Auto (after git push)
+- Push changes to GitHub
+- Render auto-deploys
+
+Method 2: Manual
+- Render Dashboard → Your Service
+- Click "Manual Deploy"
+- Select "Deploy latest commit"
+- Wait for build to complete
+
+================================================================================
+NEED MORE HELP?
+================================================================================
+
+1. Check Render logs for specific errors
+2. Verify all environment variables are set
+3. Test webhook with getWebhookInfo
+4. Create GitHub issue with error details
+
+================================================================================
+USEFUL LINKS
+================================================================================
+
+- Render Docs: https://render.com/docs
+- Render Status: https://status.render.com
+- Telegram Bot API: https://core.telegram.org/bots/api
+- python-telegram-bot Docs: https://docs.python-telegram-bot.org
+
+================================================================================

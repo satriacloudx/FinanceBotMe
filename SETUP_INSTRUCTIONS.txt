@@ -1,0 +1,231 @@
+================================================================================
+  FINANCEHUB BOT - RENDER.COM DEPLOYMENT GUIDE
+================================================================================
+
+Bot Name: FinanceHub - Business Finance Manager
+Username: @financehubx_bot
+
+================================================================================
+STEP 1: CREATE TELEGRAM BOT
+================================================================================
+
+1. Open Telegram and search for: @BotFather
+2. Send command: /newbot
+3. Enter bot name: FinanceHub - Business Finance Manager
+4. Enter username: financehubx_bot
+5. SAVE THE TOKEN (format: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz)
+
+================================================================================
+STEP 2: GET YOUR ADMIN ID
+================================================================================
+
+1. Search for: @userinfobot
+2. Click Start
+3. SAVE YOUR USER ID (format: 123456789)
+
+================================================================================
+STEP 3: UPLOAD TO GITHUB
+================================================================================
+
+1. Create GitHub account if you don't have one
+2. Create new repository: financehub-bot
+3. Run these commands:
+
+   git init
+   git add .
+   git commit -m "Initial commit: FinanceHub Bot"
+   git branch -M main
+   git remote add origin https://github.com/YOUR_USERNAME/financehub-bot.git
+   git push -u origin main
+
+   (Replace YOUR_USERNAME with your GitHub username)
+
+================================================================================
+STEP 4: DEPLOY TO RENDER.COM (24/7 ONLINE - FREE WEB SERVICE)
+================================================================================
+
+1. Go to: https://render.com
+2. Sign up/Login (use GitHub account - recommended)
+3. Click "New +" → "Web Service" 
+   
+   ✅ Choose "Web Service" (FREE tier available!)
+
+4. Connect your GitHub repository (financehub-bot)
+
+5. Configure Service:
+   - Name: financehub-bot
+   - Region: Singapore (or closest to you)
+   - Branch: main
+   - Root Directory: (leave empty)
+   - Runtime: Python 3
+   - Build Command: pip install -r requirements.txt
+   - Start Command: python bot.py
+   - Instance Type: Free
+
+6. Add Environment Variables (scroll down):
+   Click "Add Environment Variable" and add:
+   
+   Key: BOT_TOKEN
+   Value: (paste your token from BotFather)
+   
+   Key: ADMIN_ID
+   Value: (paste your user ID from userinfobot)
+   
+   Key: PYTHON_VERSION
+   Value: 3.10.0
+
+7. Click "Create Web Service"
+
+8. Wait 2-5 minutes for deployment
+
+9. IMPORTANT: After deployment, copy your service URL
+   Example: https://financehub-bot.onrender.com
+
+10. Set Webhook in Telegram:
+    Open this URL in browser (replace with your values):
+    
+    https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=<YOUR_RENDER_URL>/<YOUR_BOT_TOKEN>
+    
+    Example:
+    https://api.telegram.org/bot123456:ABC-DEF/setWebhook?url=https://financehub-bot.onrender.com/123456:ABC-DEF
+    
+    You should see: {"ok":true,"result":true,"description":"Webhook was set"}
+
+11. Check logs for "🚀 Starting bot with webhook..."
+
+================================================================================
+IMPORTANT NOTES
+================================================================================
+
+✅ Web Service is FREE on Render (with limitations)
+  - Service may sleep after 15 minutes of inactivity
+  - First request after sleep takes ~30 seconds to wake up
+  - Sufficient for personal/small business use
+
+✅ Webhook Setup is REQUIRED
+  - Must set webhook URL after deployment
+  - Use the setWebhook URL format provided in Step 4
+  - Verify webhook is set correctly
+
+✅ Backup database weekly via /admin → Backup Database
+  - Render Free Tier has ephemeral storage
+  - Database may be lost on restart/redeploy
+  - Regular backups are CRITICAL
+
+✅ Keep your BOT_TOKEN secret (never share it)
+
+✅ Only you (ADMIN_ID) can access /admin panel
+
+✅ Free Tier Limitations:
+  - 750 hours/month free
+  - Service sleeps after 15 min inactivity
+  - 512 MB RAM
+  - Ephemeral storage (backup needed!)
+
+✅ To prevent sleep (optional):
+  - Use UptimeRobot.com (free) to ping your URL every 14 minutes
+  - Or upgrade to paid plan ($7/mo) for always-on service
+
+================================================================================
+STEP 5: VERIFY DEPLOYMENT
+================================================================================
+
+1. Open Telegram
+2. Search for: @financehubx_bot
+3. Send /start
+4. Bot should respond (now running 24/7!)
+5. Test all features:
+   - Add Transaction
+   - View Dashboard
+   - Generate Charts
+   - Export Data
+   - Business Mode
+6. Test /admin panel (only you can access)
+
+================================================================================
+IMPORTANT NOTES
+================================================================================
+
+✓ MUST choose "Background Worker" NOT "Web Service" on Render
+  - Background Worker = Stable, instant response, free tier sufficient
+  - Web Service = Timeout issues, cold start, NOT recommended
+
+✓ Backup database weekly via /admin → Backup Database
+  - Render Free Tier has ephemeral storage
+  - Database may be lost on restart/redeploy
+  - Regular backups are CRITICAL
+
+✓ Keep your BOT_TOKEN secret (never share it)
+
+✓ Only you (ADMIN_ID) can access /admin panel
+
+✓ Free Tier Limits:
+  - 750 hours/month (enough for 24/7 operation)
+  - Shared CPU & RAM
+  - Ephemeral storage (backup needed!)
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Bot not responding?
+- Check BOT_TOKEN is correct (no spaces)
+- Check bot is running (Render Dashboard → Logs)
+- Verify service type is "Background Worker"
+- Restart: Manual Deploy → Deploy latest commit
+
+Admin panel not working?
+- Check ADMIN_ID is correct (must be number, no quotes)
+- Verify with @userinfobot
+- Check logs for errors
+
+Build failed?
+- Check requirements.txt format
+- Verify Python version (3.10.0)
+- Check Render logs for error details
+
+Database lost after restart?
+- Normal for Render Free Tier (ephemeral storage)
+- Backup regularly via /admin → Backup Database
+- Consider upgrading to Starter plan ($7/mo) for persistent storage
+
+Bot slow or timing out?
+- Verify you chose "Background Worker" not "Web Service"
+- Check Render service status
+- Monitor resource usage in Render Dashboard
+
+================================================================================
+MAINTENANCE
+================================================================================
+
+Update Bot:
+1. Make changes to code
+2. Commit: git add . && git commit -m "Update: description"
+3. Push: git push
+4. Render will auto-deploy (or Manual Deploy in dashboard)
+
+Backup Database:
+1. Open Telegram
+2. Send /admin to bot
+3. Click "💾 Backup Database"
+4. Download file sent by bot
+5. Save in safe location
+6. Do this at least once a week!
+
+Monitor Bot:
+- Check Render Dashboard → Logs regularly
+- Monitor user activity via /admin → System Stats
+- Watch for errors or unusual behavior
+
+================================================================================
+SUPPORT
+================================================================================
+
+- Render Docs: https://render.com/docs
+- Render Status: https://status.render.com
+- GitHub Issues: Report bugs or request features
+- Check README.md for detailed documentation
+
+================================================================================
+CONGRATULATIONS! YOUR FINANCEHUB BOT IS RUNNING 24/7! 🎉
+================================================================================

@@ -1,0 +1,72 @@
+================================================================================
+                    FINANCEHUB BOT - START HERE
+================================================================================
+
+Welcome! This is your FinanceHub Bot - Professional Finance Manager
+
+Bot Username: @financehubx_bot
+
+================================================================================
+                        QUICK START (3 STEPS)
+================================================================================
+
+STEP 1: Create Bot in Telegram
+-------------------------------
+1. Open Telegram → Search: @BotFather
+2. Send: /newbot
+3. Name: FinanceHub - Business Finance Manager
+4. Username: financehubx_bot
+5. SAVE THE TOKEN!
+
+STEP 2: Get Your Admin ID
+--------------------------
+1. Open Telegram → Search: @userinfobot
+2. Click Start
+3. SAVE YOUR USER ID!
+
+STEP 3: Deploy to Render.com
+-----------------------------
+1. Upload code to GitHub (see: git_commands.txt)
+2. Go to render.com → Sign up with GitHub
+3. New + → Web Service (FREE!)
+4. Connect repository
+5. Add environment variables:
+   - BOT_TOKEN = (your token)
+   - ADMIN_ID = (your user ID)
+6. Deploy!
+7. Set webhook (see SETUP_INSTRUCTIONS.txt Step 4.10)
+
+================================================================================
+                        DETAILED GUIDE
+================================================================================
+
+For complete step-by-step instructions, open:
+→ SETUP_INSTRUCTIONS.txt
+
+For git commands, open:
+→ git_commands.txt
+
+For project documentation, open:
+→ README.md
+
+================================================================================
+                        IMPORTANT NOTES
+================================================================================
+
+✓ Choose "Web Service" on Render (FREE tier available!)
+✓ MUST set webhook after deployment (see Step 4.10 in SETUP_INSTRUCTIONS.txt)
+✓ Service may sleep after 15 min inactivity (use UptimeRobot to keep awake)
+✓ Backup database weekly via /admin → Backup Database
+✓ Keep BOT_TOKEN secret (never share it)
+
+================================================================================
+                        NEED HELP?
+================================================================================
+
+- Read SETUP_INSTRUCTIONS.txt for detailed guide
+- Check README.md for documentation
+- Create GitHub issue for bugs/features
+
+================================================================================
+                    LET'S GET STARTED! 🚀
+================================================================================
