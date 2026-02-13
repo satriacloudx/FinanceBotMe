@@ -3,17 +3,18 @@ Start Handler - Onboarding & Welcome
 """
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
-from database.engine import SessionLocal
-from database.models import User, Wallet
+from database.engine import get_db
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command - Onboarding"""
     user = update.effective_user
     
-    db = SessionLocal()
-    try:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
         # Check if user exists
-        existing_user = db.query(User).filter(User.telegram_id == user.id).first()
+        cursor.execute("SELECT * FROM users WHERE telegram_id = ?", (user.id,))
+        existing_user = cursor.fetchone()
         
         if existing_user:
             # Existing user
@@ -34,28 +35,21 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         else:
             # New user - Create account
-            new_user = User(
-                telegram_id=user.id,
-                username=user.username,
-                full_name=user.first_name or "User",
-                active_profile="personal"
+            cursor.execute(
+                "INSERT INTO users (telegram_id, username, full_name, active_profile) VALUES (?, ?, ?, ?)",
+                (user.id, user.username, user.first_name or "User", "personal")
             )
-            db.add(new_user)
-            db.flush()
+            user_id = cursor.lastrowid
             
             # Create default wallets
-            personal_wallet = Wallet(
-                user_id=new_user.id,
-                profile_type="personal",
-                name="Dompet Pribadi"
+            cursor.execute(
+                "INSERT INTO wallets (user_id, profile_type, name) VALUES (?, ?, ?)",
+                (user_id, "personal", "Dompet Pribadi")
             )
-            business_wallet = Wallet(
-                user_id=new_user.id,
-                profile_type="business",
-                name="Bisnis"
+            cursor.execute(
+                "INSERT INTO wallets (user_id, profile_type, name) VALUES (?, ?, ?)",
+                (user_id, "business", "Bisnis")
             )
-            db.add_all([personal_wallet, business_wallet])
-            db.commit()
             
             keyboard = [
                 [InlineKeyboardButton("🚀 Mulai Catat Transaksi", callback_data="add_transaction")],
@@ -75,9 +69,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reply_markup,
                 parse_mode='HTML'
             )
-    
-    finally:
-        db.close()
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /help command"""
@@ -95,7 +86,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "<b>Commands:</b>\n"
         "/start - Menu utama\n"
         "/dashboard - Lihat ringkasan keuangan\n"
-        "/export - Download laporan Excel\n"
         "/profile - Ganti mode Pribadi/Bisnis\n\n"
         "Ada pertanyaan? Langsung chat aja! 😊"
     )

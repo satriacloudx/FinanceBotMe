@@ -4,8 +4,7 @@ Transaction Handler - Smart NLP-based transaction recording
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, MessageHandler, CallbackQueryHandler, filters
 from datetime import datetime
-from database.engine import SessionLocal
-from database.models import User, Wallet, Transaction, Category
+from database.engine import get_db
 from utils.parser import parse_transaction
 from utils.formatter import format_currency
 
@@ -69,57 +68,60 @@ async def save_transaction_callback(update: Update, context: ContextTypes.DEFAUL
     category_name = data[3]
     description = '_'.join(data[4:])  # Handle description with underscores
     
-    db = SessionLocal()
-    try:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
         # Get user
-        db_user = db.query(User).filter(User.telegram_id == user.id).first()
+        cursor.execute("SELECT * FROM users WHERE telegram_id = ?", (user.id,))
+        db_user = cursor.fetchone()
         
         if not db_user:
             await query.edit_message_text("❌ User tidak ditemukan. Ketik /start dulu!")
             return
         
         # Get active wallet
-        wallet = db.query(Wallet).filter(
-            Wallet.user_id == db_user.id,
-            Wallet.profile_type == db_user.active_profile
-        ).first()
+        cursor.execute(
+            "SELECT * FROM wallets WHERE user_id = ? AND profile_type = ?",
+            (db_user['id'], db_user['active_profile'])
+        )
+        wallet = cursor.fetchone()
         
         # Get or create category
-        category = db.query(Category).filter(Category.name == category_name).first()
+        cursor.execute("SELECT * FROM categories WHERE name = ?", (category_name,))
+        category = cursor.fetchone()
         
         if not category:
-            category = Category(
-                name=category_name,
-                type='expense' if tx_type == 'expense' else 'income'
+            cursor.execute(
+                "INSERT INTO categories (name, type) VALUES (?, ?)",
+                (category_name, tx_type)
             )
-            db.add(category)
-            db.flush()
+            category_id = cursor.lastrowid
+        else:
+            category_id = category['id']
         
         # Create transaction
-        transaction = Transaction(
-            wallet_id=wallet.id,
-            category_id=category.id,
-            type='expense' if tx_type == 'expense' else 'income',
-            amount=amount,
-            description=description,
-            transaction_date=datetime.utcnow()
+        cursor.execute(
+            "INSERT INTO transactions (wallet_id, category_id, type, amount, description, transaction_date) VALUES (?, ?, ?, ?, ?, ?)",
+            (wallet['id'], category_id, tx_type, amount, description, datetime.utcnow())
         )
-        db.add(transaction)
         
         # Update wallet balance
         if tx_type == 'expense':
-            wallet.balance -= amount
+            new_balance = wallet['balance'] - amount
             emoji = "💸"
             action = "keluar"
         else:
-            wallet.balance += amount
+            new_balance = wallet['balance'] + amount
             emoji = "💰"
             action = "masuk"
         
-        db.commit()
+        cursor.execute(
+            "UPDATE wallets SET balance = ? WHERE id = ?",
+            (new_balance, wallet['id'])
+        )
         
         # Success message
-        profile_name = "Pribadi" if db_user.active_profile == "personal" else "Bisnis"
+        profile_name = "Pribadi" if db_user['active_profile'] == "personal" else "Bisnis"
         
         keyboard = [
             [InlineKeyboardButton("📊 Lihat Dashboard", callback_data="dashboard")],
@@ -130,14 +132,11 @@ async def save_transaction_callback(update: Update, context: ContextTypes.DEFAUL
         await query.edit_message_text(
             f"✅ Siap Boss! {emoji}\n\n"
             f"{format_currency(amount)} udah dicatet {action} dari dompet <b>{profile_name}</b>.\n\n"
-            f"💼 <b>Saldo sekarang:</b> {format_currency(wallet.balance)}\n\n"
+            f"💼 <b>Saldo sekarang:</b> {format_currency(new_balance)}\n\n"
             f"Tetap semangat kelola keuangannya! 🚀",
             reply_markup=reply_markup,
             parse_mode='HTML'
         )
-    
-    finally:
-        db.close()
 
 async def add_transaction_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show add transaction instructions"""

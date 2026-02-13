@@ -1,46 +1,23 @@
 """
 Admin Handler - Telegram-based Admin Panel
-Only accessible by admin users (configured in .env)
-
-Features:
-- User statistics
-- Broadcast messages
-- Database backup
-- View all users
-- Transaction analytics
-- System monitoring
+Native SQLite version (no SQLAlchemy)
 """
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ConversationHandler
-from sqlalchemy import select, func, desc
 from datetime import datetime, timedelta
-from database.engine import SessionLocal, backup_database, get_db_size
-from database.models import User, Transaction, Wallet, Category, BroadcastLog
-from utils import format_currency, format_date
+from database.engine import get_db, backup_database, get_db_size
+from utils.formatter import format_currency, format_date
 import os
 
 # Conversation states
 BROADCAST_MESSAGE = 1
 
-# Admin IDs (will be loaded from config)
+# Admin IDs
 ADMIN_IDS = []
 
 def is_admin(user_id: int) -> bool:
     """Check if user is admin"""
     return user_id in ADMIN_IDS
-
-def admin_only(func):
-    """Decorator to restrict access to admins only"""
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = update.effective_user.id
-        if not is_admin(user_id):
-            await update.message.reply_text(
-                "⛔ Access Denied\n\n"
-                "This command is only available for administrators."
-            )
-            return
-        return await func(update, context)
-    return wrapper
 
 async def admin_menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show admin menu - /admin"""
@@ -83,28 +60,32 @@ async def admin_stats_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
     
-    db = SessionLocal()
-    try:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
         # Get statistics
-        total_users = db.query(User).count()
-        total_transactions = db.query(Transaction).count()
+        cursor.execute("SELECT COUNT(*) FROM users")
+        total_users = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM transactions")
+        total_transactions = cursor.fetchone()[0]
         
         # Active users (last 7 days)
         week_ago = datetime.utcnow() - timedelta(days=7)
-        active_users = db.query(User).filter(User.updated_at >= week_ago).count()
+        cursor.execute("SELECT COUNT(*) FROM users WHERE updated_at >= ?", (week_ago,))
+        active_users = cursor.fetchone()[0]
         
         # New users today
         today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-        new_users_today = db.query(User).filter(User.created_at >= today).count()
+        cursor.execute("SELECT COUNT(*) FROM users WHERE created_at >= ?", (today,))
+        new_users_today = cursor.fetchone()[0]
         
         # Total transaction amount
-        total_income = db.query(func.sum(Transaction.amount)).filter(
-            Transaction.type == 'income'
-        ).scalar() or 0
+        cursor.execute("SELECT SUM(amount) FROM transactions WHERE type = 'income'")
+        total_income = cursor.fetchone()[0] or 0
         
-        total_expense = db.query(func.sum(Transaction.amount)).filter(
-            Transaction.type == 'expense'
-        ).scalar() or 0
+        cursor.execute("SELECT SUM(amount) FROM transactions WHERE type = 'expense'")
+        total_expense = cursor.fetchone()[0] or 0
         
         # Database size
         db_size = get_db_size()
@@ -135,33 +116,31 @@ async def admin_stats_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             reply_markup=reply_markup,
             parse_mode='HTML'
         )
-    
-    finally:
-        db.close()
 
 async def admin_users_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show users list"""
     query = update.callback_query
     await query.answer()
     
-    db = SessionLocal()
-    try:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
         # Get recent users
-        users = db.query(User).order_by(desc(User.created_at)).limit(20).all()
+        cursor.execute("SELECT * FROM users ORDER BY created_at DESC LIMIT 20")
+        users = cursor.fetchall()
         
         message = "👥 <b>Recent Users (Last 20)</b>\n\n"
         
         for user in users:
-            profile_emoji = "👤" if user.active_profile == "personal" else "🏢"
+            profile_emoji = "👤" if user['active_profile'] == "personal" else "🏢"
             message += (
-                f"{profile_emoji} <b>{user.full_name}</b>\n"
-                f"   ID: <code>{user.telegram_id}</code>\n"
-                f"   Username: @{user.username or '-'}\n"
-                f"   Joined: {format_date(user.created_at, 'short')}\n\n"
+                f"{profile_emoji} <b>{user['full_name']}</b>\n"
+                f"   ID: <code>{user['telegram_id']}</code>\n"
+                f"   Username: @{user['username'] or '-'}\n"
+                f"   Joined: {format_date(datetime.fromisoformat(user['created_at']), 'short')}\n\n"
             )
         
         keyboard = [
-            [InlineKeyboardButton("📊 User Stats", callback_data="admin_user_stats")],
             [InlineKeyboardButton("« Back to Menu", callback_data="admin_menu")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -171,59 +150,6 @@ async def admin_users_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             reply_markup=reply_markup,
             parse_mode='HTML'
         )
-    
-    finally:
-        db.close()
-
-async def admin_user_stats_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show detailed user statistics"""
-    query = update.callback_query
-    await query.answer()
-    
-    db = SessionLocal()
-    try:
-        # Profile distribution
-        personal_count = db.query(User).filter(User.active_profile == 'personal').count()
-        business_count = db.query(User).filter(User.active_profile == 'business').count()
-        
-        # User growth (last 7 days)
-        growth_data = []
-        for i in range(7):
-            date = datetime.utcnow() - timedelta(days=i)
-            date_start = date.replace(hour=0, minute=0, second=0, microsecond=0)
-            date_end = date_start + timedelta(days=1)
-            
-            count = db.query(User).filter(
-                User.created_at >= date_start,
-                User.created_at < date_end
-            ).count()
-            
-            growth_data.append(f"{date.strftime('%d %b')}: +{count}")
-        
-        message = (
-            "📊 <b>User Statistics</b>\n\n"
-            f"<b>Profile Distribution:</b>\n"
-            f"👤 Personal: {personal_count}\n"
-            f"🏢 Business: {business_count}\n\n"
-            f"<b>Growth (Last 7 Days):</b>\n"
-        )
-        
-        for data in reversed(growth_data):
-            message += f"• {data}\n"
-        
-        keyboard = [
-            [InlineKeyboardButton("« Back to Users", callback_data="admin_users")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            message,
-            reply_markup=reply_markup,
-            parse_mode='HTML'
-        )
-    
-    finally:
-        db.close()
 
 async def admin_broadcast_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start broadcast conversation"""
@@ -247,9 +173,10 @@ async def admin_broadcast_receive(update: Update, context: ContextTypes.DEFAULT_
     # Store message in context
     context.user_data['broadcast_message'] = message_text
     
-    db = SessionLocal()
-    try:
-        total_users = db.query(User).count()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM users")
+        total_users = cursor.fetchone()[0]
         
         keyboard = [
             [
@@ -270,9 +197,6 @@ async def admin_broadcast_receive(update: Update, context: ContextTypes.DEFAULT_
         )
         
         return ConversationHandler.END
-    
-    finally:
-        db.close()
 
 async def admin_broadcast_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Confirm and send broadcast"""
@@ -284,20 +208,20 @@ async def admin_broadcast_confirm_callback(update: Update, context: ContextTypes
         await query.edit_message_text("❌ Error: Message not found.")
         return
     
-    db = SessionLocal()
-    try:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
         # Get all users
-        users = db.query(User).all()
+        cursor.execute("SELECT telegram_id FROM users")
+        users = cursor.fetchall()
         total_users = len(users)
         
         # Create broadcast log
-        broadcast_log = BroadcastLog(
-            message=message_text,
-            total_users=total_users,
-            created_by=query.from_user.id
+        cursor.execute(
+            "INSERT INTO broadcast_logs (message, total_users, created_by) VALUES (?, ?, ?)",
+            (message_text, total_users, query.from_user.id)
         )
-        db.add(broadcast_log)
-        db.commit()
+        broadcast_id = cursor.lastrowid
         
         # Send to all users
         success_count = 0
@@ -311,19 +235,20 @@ async def admin_broadcast_confirm_callback(update: Update, context: ContextTypes
         for user in users:
             try:
                 await context.bot.send_message(
-                    chat_id=user.telegram_id,
+                    chat_id=user['telegram_id'],
                     text=f"📢 <b>Announcement</b>\n\n{message_text}",
                     parse_mode='HTML'
                 )
                 success_count += 1
             except Exception as e:
                 failed_count += 1
-                print(f"Failed to send to {user.telegram_id}: {e}")
+                print(f"Failed to send to {user['telegram_id']}: {e}")
         
         # Update broadcast log
-        broadcast_log.success_count = success_count
-        broadcast_log.failed_count = failed_count
-        db.commit()
+        cursor.execute(
+            "UPDATE broadcast_logs SET success_count = ?, failed_count = ? WHERE id = ?",
+            (success_count, failed_count, broadcast_id)
+        )
         
         # Send result
         await query.message.reply_text(
@@ -332,12 +257,9 @@ async def admin_broadcast_confirm_callback(update: Update, context: ContextTypes
             f"• Total: {total_users}\n"
             f"• Success: {success_count}\n"
             f"• Failed: {failed_count}\n\n"
-            f"Broadcast ID: #{broadcast_log.id}",
+            f"Broadcast ID: #{broadcast_id}",
             parse_mode='HTML'
         )
-    
-    finally:
-        db.close()
 
 async def admin_broadcast_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel broadcast"""
@@ -403,30 +325,29 @@ async def admin_analytics_callback(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     await query.answer()
     
-    db = SessionLocal()
-    try:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
         # Top categories
-        top_categories = db.query(
-            Category.name,
-            Category.emoji,
-            func.count(Transaction.id).label('count'),
-            func.sum(Transaction.amount).label('total')
-        ).join(
-            Transaction
-        ).group_by(
-            Category.id
-        ).order_by(
-            desc('count')
-        ).limit(5).all()
+        cursor.execute("""
+            SELECT c.name, c.emoji, COUNT(t.id) as count, SUM(t.amount) as total
+            FROM categories c
+            LEFT JOIN transactions t ON c.id = t.category_id
+            GROUP BY c.id
+            ORDER BY count DESC
+            LIMIT 5
+        """)
+        top_categories = cursor.fetchall()
         
         message = "📈 <b>Analytics</b>\n\n<b>Top Categories:</b>\n\n"
         
         for cat in top_categories:
-            message += (
-                f"{cat.emoji} <b>{cat.name}</b>\n"
-                f"   Transactions: {cat.count}\n"
-                f"   Total: {format_currency(cat.total or 0)}\n\n"
-            )
+            if cat['count'] > 0:
+                message += (
+                    f"{cat['emoji']} <b>{cat['name']}</b>\n"
+                    f"   Transactions: {cat['count']}\n"
+                    f"   Total: {format_currency(cat['total'] or 0)}\n\n"
+                )
         
         keyboard = [
             [InlineKeyboardButton("« Back to Menu", callback_data="admin_menu")]
@@ -438,9 +359,6 @@ async def admin_analytics_callback(update: Update, context: ContextTypes.DEFAULT
             reply_markup=reply_markup,
             parse_mode='HTML'
         )
-    
-    finally:
-        db.close()
 
 async def admin_system_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show system information"""
@@ -459,7 +377,7 @@ async def admin_system_callback(update: Update, context: ContextTypes.DEFAULT_TY
         f"<b>Database:</b> SQLite (finance.db)\n"
         f"<b>DB Size:</b> {db_size} MB\n\n"
         f"<b>Bot Status:</b> ✅ Running\n"
-        f"<b>Uptime:</b> {format_date(datetime.now(), 'long')}"
+        f"<b>Time:</b> {format_date(datetime.now(), 'long')}"
     )
     
     keyboard = [
@@ -542,7 +460,6 @@ def register_admin_handlers(application, admin_ids: list):
     # Callback handlers
     application.add_handler(CallbackQueryHandler(admin_stats_callback, pattern="^admin_stats$"))
     application.add_handler(CallbackQueryHandler(admin_users_callback, pattern="^admin_users$"))
-    application.add_handler(CallbackQueryHandler(admin_user_stats_callback, pattern="^admin_user_stats$"))
     application.add_handler(CallbackQueryHandler(admin_backup_callback, pattern="^admin_backup$"))
     application.add_handler(CallbackQueryHandler(admin_analytics_callback, pattern="^admin_analytics$"))
     application.add_handler(CallbackQueryHandler(admin_system_callback, pattern="^admin_system$"))

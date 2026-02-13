@@ -1,103 +1,139 @@
 """
-SQLite Engine - Local file-based database
-Perfect for: Single-server deployment, portable, zero-cost
-
-Advantages:
-- No database server needed
-- Single file (finance.db)
-- Easy backup (just copy file)
-- Zero configuration
-- Perfect for small-medium scale (1-1000 users)
-
-Limitations:
-- Single server only (no distributed)
-- Write concurrency limited
-- Max database size ~140TB (more than enough)
+SQLite Engine - Native Python sqlite3 (no SQLAlchemy)
+Zero dependencies, works with any Python version
 """
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy.pool import StaticPool
+import sqlite3
 import os
+from contextlib import contextmanager
 
 # Database file path
 DB_FILE = "finance.db"
-DATABASE_URL = f"sqlite:///{DB_FILE}"
 
-# Create engine with proper SQLite settings
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={
-        "check_same_thread": False,  # Allow multi-threading
-        "timeout": 30  # 30 second timeout for locks
-    },
-    poolclass=StaticPool,  # Use static pool for SQLite
-    echo=False  # Set to True for SQL debugging
-)
+def get_connection():
+    """Get database connection"""
+    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+    conn.row_factory = sqlite3.Row  # Access columns by name
+    return conn
 
-# Session factory
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
-
-Base = declarative_base()
-
+@contextmanager
 def get_db():
-    """Get database session"""
-    db = SessionLocal()
+    """Context manager for database connection"""
+    conn = get_connection()
     try:
-        yield db
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
-        db.close()
+        conn.close()
 
 def init_db():
     """Initialize database tables"""
-    from .models import User, Wallet, Transaction, Category
+    conn = get_connection()
+    cursor = conn.cursor()
     
-    # Create all tables
-    Base.metadata.create_all(bind=engine)
-    
-    # Seed initial categories
-    db = SessionLocal()
     try:
+        # Users table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id INTEGER UNIQUE NOT NULL,
+                username TEXT,
+                full_name TEXT NOT NULL,
+                active_profile TEXT DEFAULT 'personal',
+                is_admin INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Wallets table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS wallets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                profile_type TEXT NOT NULL,
+                name TEXT NOT NULL,
+                balance REAL DEFAULT 0.0,
+                currency TEXT DEFAULT 'IDR',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        """)
+        
+        # Categories table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                emoji TEXT DEFAULT '💰',
+                type TEXT NOT NULL
+            )
+        """)
+        
+        # Transactions table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                wallet_id INTEGER NOT NULL,
+                category_id INTEGER,
+                type TEXT NOT NULL,
+                amount REAL NOT NULL,
+                description TEXT,
+                transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (wallet_id) REFERENCES wallets(id) ON DELETE CASCADE,
+                FOREIGN KEY (category_id) REFERENCES categories(id)
+            )
+        """)
+        
+        # Broadcast logs table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS broadcast_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message TEXT NOT NULL,
+                total_users INTEGER DEFAULT 0,
+                success_count INTEGER DEFAULT 0,
+                failed_count INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_by INTEGER NOT NULL
+            )
+        """)
+        
         # Check if categories exist
-        existing = db.query(Category).first()
-        if not existing:
+        cursor.execute("SELECT COUNT(*) FROM categories")
+        if cursor.fetchone()[0] == 0:
+            # Seed categories
             categories = [
-                # Expense categories
-                Category(name='Makan', emoji='🍽️', type='expense'),
-                Category(name='Transport', emoji='🚗', type='expense'),
-                Category(name='Belanja', emoji='🛒', type='expense'),
-                Category(name='Tagihan', emoji='📄', type='expense'),
-                Category(name='Hiburan', emoji='🎮', type='expense'),
-                Category(name='Kesehatan', emoji='🏥', type='expense'),
-                Category(name='Pendidikan', emoji='📚', type='expense'),
-                Category(name='Investasi', emoji='📈', type='expense'),
-                Category(name='Lainnya', emoji='💰', type='expense'),
-                
-                # Income categories
-                Category(name='Gaji', emoji='💵', type='income'),
-                Category(name='Bonus', emoji='🎁', type='income'),
-                Category(name='Investasi', emoji='📊', type='income'),
-                Category(name='Freelance', emoji='💼', type='income'),
-                Category(name='Bisnis', emoji='🏢', type='income'),
+                ('Makan', '🍽️', 'expense'),
+                ('Transport', '🚗', 'expense'),
+                ('Belanja', '🛒', 'expense'),
+                ('Tagihan', '📄', 'expense'),
+                ('Hiburan', '🎮', 'expense'),
+                ('Kesehatan', '🏥', 'expense'),
+                ('Pendidikan', '📚', 'expense'),
+                ('Investasi', '📈', 'expense'),
+                ('Lainnya', '💰', 'expense'),
+                ('Gaji', '💵', 'income'),
+                ('Bonus', '🎁', 'income'),
+                ('Investasi', '📊', 'income'),
+                ('Freelance', '💼', 'income'),
+                ('Bisnis', '🏢', 'income'),
             ]
-            db.add_all(categories)
-            db.commit()
-            print("✅ Categories seeded!")
+            cursor.executemany(
+                "INSERT INTO categories (name, emoji, type) VALUES (?, ?, ?)",
+                categories
+            )
+        
+        conn.commit()
+        print(f"✅ Database initialized: {DB_FILE}")
+        
     finally:
-        db.close()
-    
-    print(f"✅ Database initialized: {DB_FILE}")
+        conn.close()
 
 def backup_database(backup_path: str = None):
-    """
-    Backup database file
-    
-    Args:
-        backup_path: Path for backup file (default: finance_backup_YYYYMMDD_HHMMSS.db)
-    """
+    """Backup database file"""
     import shutil
     from datetime import datetime
     

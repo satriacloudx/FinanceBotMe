@@ -3,22 +3,22 @@ Profile Handler - Switch between Personal & Business mode
 """
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
-from database.engine import SessionLocal
-from database.models import User
+from database.engine import get_db
 
 async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /profile command"""
     user = update.effective_user
     
-    db = SessionLocal()
-    try:
-        db_user = db.query(User).filter(User.telegram_id == user.id).first()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE telegram_id = ?", (user.id,))
+        db_user = cursor.fetchone()
         
         if not db_user:
             await update.message.reply_text("❌ User tidak ditemukan. Ketik /start dulu ya!")
             return
         
-        current_profile = "👤 Pribadi" if db_user.active_profile == "personal" else "🏢 Bisnis"
+        current_profile = "👤 Pribadi" if db_user['active_profile'] == "personal" else "🏢 Bisnis"
         
         keyboard = [
             [InlineKeyboardButton("👤 Mode Pribadi", callback_data="profile_personal")],
@@ -36,9 +36,6 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup,
             parse_mode='HTML'
         )
-    
-    finally:
-        db.close()
 
 async def switch_profile_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle profile switch callback"""
@@ -48,9 +45,10 @@ async def switch_profile_callback(update: Update, context: ContextTypes.DEFAULT_
     user = query.from_user
     profile_type = query.data.split('_')[1]  # profile_personal or profile_business
     
-    db = SessionLocal()
-    try:
-        db_user = db.query(User).filter(User.telegram_id == user.id).first()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE telegram_id = ?", (user.id,))
+        db_user = cursor.fetchone()
         
         if not db_user:
             await query.edit_message_text("❌ User tidak ditemukan.")
@@ -58,8 +56,10 @@ async def switch_profile_callback(update: Update, context: ContextTypes.DEFAULT_
         
         # Update profile
         new_profile = "personal" if profile_type == 'personal' else "business"
-        db_user.active_profile = new_profile
-        db.commit()
+        cursor.execute(
+            "UPDATE users SET active_profile = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (new_profile, db_user['id'])
+        )
         
         profile_name = "👤 Pribadi" if new_profile == "personal" else "🏢 Bisnis"
         
@@ -76,9 +76,6 @@ async def switch_profile_callback(update: Update, context: ContextTypes.DEFAULT_
             reply_markup=reply_markup,
             parse_mode='HTML'
         )
-    
-    finally:
-        db.close()
 
 async def switch_profile_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show profile switch menu from callback"""
@@ -87,11 +84,12 @@ async def switch_profile_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     user = query.from_user
     
-    db = SessionLocal()
-    try:
-        db_user = db.query(User).filter(User.telegram_id == user.id).first()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE telegram_id = ?", (user.id,))
+        db_user = cursor.fetchone()
         
-        current_profile = "👤 Pribadi" if db_user.active_profile == "personal" else "🏢 Bisnis"
+        current_profile = "👤 Pribadi" if db_user['active_profile'] == "personal" else "🏢 Bisnis"
         
         keyboard = [
             [InlineKeyboardButton("👤 Mode Pribadi", callback_data="profile_personal")],
@@ -106,9 +104,6 @@ async def switch_profile_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
             reply_markup=reply_markup,
             parse_mode='HTML'
         )
-    
-    finally:
-        db.close()
 
 def register_profile_handlers(application):
     """Register all profile-related handlers"""
