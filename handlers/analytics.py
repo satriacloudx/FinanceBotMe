@@ -1,5 +1,5 @@
 """
-Analytics Handler - Dashboard, Charts, and Excel Export
+Analytics Handler - Dashboard and Text Reports
 """
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
@@ -7,8 +7,6 @@ from datetime import datetime, timedelta
 from database.engine import SessionLocal
 from database.models import User, Wallet, Transaction, Category
 from utils.formatter import format_currency, format_date
-from utils.chart_generator import generate_expense_chart
-import pandas as pd
 import os
 
 async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -48,11 +46,6 @@ async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 cat_name = t.category.name
                 expense_by_category[cat_name] = expense_by_category.get(cat_name, 0) + t.amount
         
-        # Generate chart if there are expenses
-        chart_file = None
-        if expense_by_category:
-            chart_file = generate_expense_chart(expense_by_category, f"chart_{user.id}.png")
-        
         # Build message
         profile_name = "👤 Pribadi" if db_user.active_profile == "personal" else "🏢 Bisnis"
         month_name = datetime.utcnow().strftime("%B %Y")
@@ -74,26 +67,15 @@ async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 message += f"• {cat}: {format_currency(amount)} ({percentage:.1f}%)\n"
         
         keyboard = [
-            [InlineKeyboardButton("📥 Export Excel", callback_data="export_excel")],
             [InlineKeyboardButton("➕ Catat Transaksi", callback_data="add_transaction")],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Send chart if available
-        if chart_file and os.path.exists(chart_file):
-            await update.message.reply_photo(
-                photo=open(chart_file, 'rb'),
-                caption=message,
-                reply_markup=reply_markup,
-                parse_mode='HTML'
-            )
-            os.remove(chart_file)  # Clean up
-        else:
-            await update.message.reply_text(
-                message,
-                reply_markup=reply_markup,
-                parse_mode='HTML'
-            )
+        await update.message.reply_text(
+            message,
+            reply_markup=reply_markup,
+            parse_mode='HTML'
+        )
     
     finally:
         db.close()
@@ -139,10 +121,10 @@ async def dashboard_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     finally:
         db.close()
 
-async def export_excel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Export transactions to Excel"""
+async def export_text_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Export transactions as text"""
     query = update.callback_query
-    await query.answer("⏳ Generating Excel file...")
+    await query.answer("⏳ Generating report...")
     
     user = query.from_user
     
@@ -158,67 +140,44 @@ async def export_excel_callback(update: Update, context: ContextTypes.DEFAULT_TY
         # Get all transactions
         transactions = db.query(Transaction).filter(
             Transaction.wallet_id == wallet.id
-        ).order_by(Transaction.transaction_date.desc()).all()
+        ).order_by(Transaction.transaction_date.desc()).limit(50).all()
         
         if not transactions:
-            await query.edit_message_text("❌ Belum ada transaksi untuk di-export.")
+            await query.edit_message_text("❌ Belum ada transaksi.")
             return
         
-        # Prepare data for Excel
-        data = []
-        for t in transactions:
-            data.append({
-                'Tanggal': format_date(t.transaction_date, 'medium'),
-                'Tipe': 'Pemasukan' if t.type == 'income' else 'Pengeluaran',
-                'Kategori': t.category.name if t.category else '-',
-                'Jumlah': t.amount,
-                'Keterangan': t.description or '-'
-            })
-        
-        df = pd.DataFrame(data)
-        
-        # Generate filename
+        # Build text report
         profile_name = "Pribadi" if db_user.active_profile == "personal" else "Bisnis"
-        filename = f"CuanFlow_{profile_name}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        report = f"📊 <b>Laporan Transaksi {profile_name}</b>\n"
+        report += f"📅 {datetime.now().strftime('%d %B %Y')}\n\n"
         
-        # Save to Excel
-        df.to_excel(filename, index=False, sheet_name='Transaksi')
+        for t in transactions[:20]:  # Show last 20
+            emoji = "💰" if t.type == "income" else "💸"
+            report += f"{emoji} {format_date(t.transaction_date, 'short')}\n"
+            report += f"   {t.category.name if t.category else 'Lainnya'}: {format_currency(t.amount)}\n"
+            if t.description:
+                report += f"   📝 {t.description}\n"
+            report += "\n"
         
-        # Send file
-        await query.message.reply_document(
-            document=open(filename, 'rb'),
-            filename=filename,
-            caption=f"📥 <b>Laporan Keuangan {profile_name}</b>\n\n"
-                    f"Total transaksi: {len(transactions)}\n"
-                    f"Generated: {format_date(datetime.now(), 'long')}",
-            parse_mode='HTML'
-        )
+        if len(transactions) > 20:
+            report += f"<i>... dan {len(transactions) - 20} transaksi lainnya</i>\n"
         
-        # Clean up
-        os.remove(filename)
-        
-        await query.edit_message_text("✅ File Excel berhasil dikirim!")
+        await query.edit_message_text(report, parse_mode='HTML')
     
     finally:
         db.close()
 
 async def export_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /export command"""
-    await update.message.reply_text("⏳ Sedang generate laporan Excel...")
-    
-    # Reuse the export logic
-    fake_query = type('obj', (object,), {
-        'from_user': update.effective_user,
-        'message': update.message,
-        'answer': lambda x: None,
-        'edit_message_text': lambda x: None
-    })()
-    
-    await export_excel_callback(fake_query, context)
+    await update.message.reply_text(
+        "📊 <b>Export Laporan</b>\n\n"
+        "Fitur export Excel sementara tidak tersedia.\n"
+        "Gunakan /dashboard untuk lihat ringkasan transaksi.",
+        parse_mode='HTML'
+    )
 
 def register_analytics_handlers(application):
     """Register all analytics-related handlers"""
     application.add_handler(CommandHandler("dashboard", dashboard_command))
     application.add_handler(CommandHandler("export", export_command))
     application.add_handler(CallbackQueryHandler(dashboard_callback, pattern="^dashboard$"))
-    application.add_handler(CallbackQueryHandler(export_excel_callback, pattern="^export_excel$"))
