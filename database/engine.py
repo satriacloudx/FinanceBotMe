@@ -30,6 +30,18 @@ def get_db():
 
 def init_db():
     """Initialize database tables"""
+    # Check if database file exists and is valid
+    if os.path.exists(DB_FILE):
+        try:
+            # Try to open and verify it's a valid database
+            test_conn = sqlite3.connect(DB_FILE)
+            test_conn.execute("SELECT 1")
+            test_conn.close()
+        except sqlite3.DatabaseError:
+            # File is corrupted, remove it
+            print(f"⚠️  Corrupted database file detected, recreating...")
+            os.remove(DB_FILE)
+    
     conn = get_connection()
     cursor = conn.cursor()
     

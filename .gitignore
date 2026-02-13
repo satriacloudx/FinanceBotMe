@@ -29,8 +29,8 @@ temp_*
 # Ignore database backup files only
 finance_backup_*.db
 
-# Keep main database in repo
-!finance.db
+# Keep main database in repo (will be auto-created)
+# !finance.db
 
 # Logs
 *.log
