@@ -38,12 +38,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-async def post_init(application):
-    """Initialize database after bot starts"""
-    logger.info("🚀 Initializing SQLite database...")
-    init_db()
-    logger.info("✅ Database ready!")
-
 async def main():
     """Main function - Start the bot"""
     try:
@@ -51,11 +45,15 @@ async def main():
         config.validate()
         logger.info("✅ Configuration validated")
         
-        # Build application
+        # Initialize database BEFORE building application
+        logger.info("🚀 Initializing SQLite database...")
+        init_db()
+        logger.info("✅ Database ready!")
+        
+        # Build application (without post_init)
         application = (
             ApplicationBuilder()
             .token(config.TELEGRAM_BOT_TOKEN)
-            .post_init(post_init)
             .build()
         )
         
