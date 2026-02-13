@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Charts & Reports
+*.png
+*.jpg
+*.xlsx
+temp_*
+
+# Ignore database backup files only
+finance_backup_*.db
+
+# Keep main database in repo
+!finance.db
+
+# Logs
+*.log
