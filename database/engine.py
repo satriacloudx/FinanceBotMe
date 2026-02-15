@@ -129,7 +129,7 @@ def init_db():
                 ('Lainnya', '💰', 'expense'),
                 ('Gaji', '💵', 'income'),
                 ('Bonus', '🎁', 'income'),
-                ('Investasi', '📊', 'income'),
+                ('Dividen', '📊', 'income'),
                 ('Freelance', '💼', 'income'),
                 ('Bisnis', '🏢', 'income'),
             ]
